@@ -167,6 +167,7 @@ def df_dict_expansion(df,column_name,drop=False,prefix=None,sufix=None):
         values_list.append(value)
 
     expanded_df = pd.DataFrame(values_list)
+    expanded_df.index = df.index
 
     if prefix != None or sufix != None:
         expanded_df.columns = add_prefix_sufix_in_df(expanded_df,prefix=prefix,sufix=sufix)
