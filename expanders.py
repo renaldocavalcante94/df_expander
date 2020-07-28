@@ -272,7 +272,7 @@ def df_json_expander(df,column,drop=False,prefix=None,sufix=None):
     blank_dicts = {i:np.nan for i in new_columns}
     null_indexes = list(series[series.isnull()].index)
     
-    for i in null_index:
+    for i in null_indexes:
         series[i] = blank_dicts
 
     new_df = pd.DataFrame(list(series),columns=new_columns)
