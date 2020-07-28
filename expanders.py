@@ -57,7 +57,11 @@ def str_series_to_dict(series):
         raise TypeError("The dtype of the series must be a str")
 
     for x in series.values:
-        x = ast.literal_eval(x)
+        try:
+            x = ast.literal_eval(x)
+        except Exception as error:
+            print(x)
+            raise error
         dict_list.append(x)
     return pd.Series(dict_list,name=series.name)
 
@@ -85,7 +89,7 @@ def add_prefix_sufix_in_df(df,prefix=None,sufix=None):
         raise TypeError("sufix argument must be an str")
     if type(df) != pd.DataFrame:
         raise TypeError("Df must be an pandas.DataFrame object")
-
+    
     if prefix != None and sufix == None:
         column_list = (prefix+'_'+x for x in df.columns)
     elif prefix != None and sufix != None:
@@ -94,7 +98,7 @@ def add_prefix_sufix_in_df(df,prefix=None,sufix=None):
         column_list = (x+'_'+sufix for x in df.columns)
     else:
         raise AttributeError("This function needs to receive a prefix or a sufix.")
-
+    
     return column_list
 
 def clean_series_nan(series):
@@ -170,9 +174,114 @@ def df_dict_expansion(df,column_name,drop=False,prefix=None,sufix=None):
     expanded_df.index = df.index
 
     if prefix != None or sufix != None:
-        expanded_df.columns = add_prefix_sufix_in_df(expanded_df,prefix=prefix,sufix=sufix)
+         expanded_df.columns = add_prefix_sufix_in_df(expanded_df,prefix=prefix,sufix=sufix)
     
     if drop == True:
         return pd.concat([df,expanded_df],axis=1).drop(columns=[column_name])
 
     return pd.concat([df,expanded_df],axis=1)
+
+
+
+def read_json_file(file):
+    with open(file) as f:
+        json_file = json.load(f)
+
+    return json_file
+
+
+
+def dict_iterator(dict_obj,_mother_key=None):
+    """"
+    Iterate over all nested objects inside a json, and returns the values, associate with the mother keys
+
+    Arguments:
+    dict_obj {dict} -- Dict originated from a json,
+
+    Returns:
+    [dict] -- Returns a dict, with all associate keywords above the nested objects inside the dict.
+    """
+
+
+    main_dict = dict()
+
+    for key,value in dict_obj.items():
+        if type(value) != dict:
+            if _mother_key == None:
+                main_dict.append({key:value})
+            else:
+                main_dict[_mother_key+":"+key]=value
+        else:
+            nest_dicts = dict_iterator(value,key)
+            main_dict.update(nest_dicts) 
+
+    return main_dict
+
+
+
+def json_iterator(obj,_mother_key='main'):
+    """Iterate over a json serialzied object, and returns the objects associates with all nested objects.
+
+    Args:
+        obj (serialized json): serialized json
+
+    Returns:
+        [dict]: returns a dict, with all nested objects associate to the above one
+    """
+    main_obj = dict()
+
+    if type(obj) != dict and type(obj) != list:
+        main_obj[_mother_key] = obj
+    elif type(obj) == list:
+        for value in obj:
+            nest_json = json_iterator(value)
+            main_obj.update(nest_json)
+    elif type(obj) == dict:
+        nest_json = dict_iterator(obj)
+        main_obj.update(nest_json)
+    
+    return main_obj
+
+
+def df_json_expander(df,column,drop=False,prefix=None,sufix=None):
+    """Expands a json column from a dataframe and concat it in other columns
+
+    Args:
+        df (pandas.DataFrame): Dataframe with the column to be expanded
+        column (str): Name of the column to bem expaned
+        drop (bool, optional): Parameter to determine if the column will be dropped or not. Defaults to False.
+        prefix ([type], optional): prefix to be added before the columns name of the expaded column. Defaults to None.
+        sufix ([type], optional): Sufix to be aded after the columns name of the expanded column. Defaults to None.
+
+    Returns:
+        [pandas.DataFrame]: returns a concatenated pandas.DataFrame
+    """
+    
+    series = df[column].values
+    new_columns = list()
+
+    for i,value in enumerate(series):
+        if series[i] != '[]':
+            series[i] = json_iterator(json.loads(value))
+            new_columns += list(series[i].keys())
+        else:
+            series[i] = None
+    
+    new_columns = set(new_columns)
+    series = pd.Series(series)
+    blank_dicts = {i:np.nan for i in new_columns}
+    null_indexes = list(series[series.isnull()].index)
+    
+    for i in null_index:
+        series[i] = blank_dicts
+
+    new_df = pd.DataFrame(list(series),columns=new_columns)
+
+    #Add prefix
+    if prefix != None or sufix != None:
+        new_df.columns = add_prefix_sufix_in_df(new_df,prefix=prefix,sufix=sufix)        
+
+    if drop == True:
+        return pd.concat([df,new_df],axis=1).drop(column,axis=1)
+
+    return pd.concat([df,new_df],axis=1)
